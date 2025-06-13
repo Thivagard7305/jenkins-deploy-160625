@@ -1,78 +1,74 @@
 trigger:
-  branches:
-    include:
-      - master
+- master
+
+pool:
+  vmImage: ubuntu-latest
 
 variables:
   imageName: 'my-java-app'
-  dockerRegistryServiceConnection: 'ACR-Service-Connection'       # Docker Registry type
   acrLoginServer: 'mygreensappacr.azurecr.io'
-  containerRegistry: 'mygreensappacr'
-  azureServiceConnection: 'AzureRM-AKS-Connection'                # Azure Resource Manager type
-  kubernetesServiceConnection: 'AKS-K8S-Connection'               # Kubernetes type
+  dockerRegistryServiceConnection: 'ACR-Service-Connection'
+  azureServiceConnection: 'AzureRM-AKS-Connection'
+  kubernetesServiceConnection: 'AKS-K8S-Connection'
   aksCluster: 'mygreensappaks'
   aksResourceGroup: 'MyGreensApp-RG'
   namespace: 'default'
 
-pool:
-  vmImage: 'ubuntu-latest'
+steps:
 
-stages:
-- stage: Build
-  displayName: 'Build Stage'
-  jobs:
-  - job: Build_Java
-    displayName: 'Build and Push Image'
-    steps:
-    - checkout: self
+# Step 1: Checkout code
+- checkout: self
 
-    - task: Maven@3
-      displayName: 'Build WAR with Maven'
-      inputs:
-        mavenPomFile: 'pom.xml'
-        goals: 'package'
-        javaHomeOption: 'JDKVersion'
-        jdkVersionOption: '1.11'
-        mavenVersionOption: 'Default'
+# Step 2: Build the WAR file using Maven
+- task: Maven@3
+  displayName: 'Build WAR with Maven'
+  inputs:
+    mavenPomFile: 'pom.xml'
+    goals: 'package'
+    javaHomeOption: 'JDKVersion'
+    jdkVersionOption: '1.11'
+    mavenVersionOption: 'Default'
 
-    - task: Docker@2
-      displayName: 'Build and Push Docker Image'
-      inputs:
-        containerRegistry: $(dockerRegistryServiceConnection)
-        repository: $(imageName)
-        command: buildAndPush
-        Dockerfile: '**/Dockerfile'
-        tags: |
-          $(Build.BuildId)
+# Step 3: Build and push Docker image to ACR
+- task: Docker@2
+  displayName: 'Build and Push Docker Image'
+  inputs:
+    containerRegistry: $(dockerRegistryServiceConnection)
+    repository: $(imageName)
+    command: buildAndPush
+    Dockerfile: '**/Dockerfile'
+    tags: |
+      $(Build.BuildId)
 
-- stage: Deploy
-  displayName: 'Deploy Stage'
-  dependsOn: Build
-  jobs:
-  - deployment: DeployToAKS
-    displayName: 'Deploy to AKS'
-    environment: 'aks-env'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - task: AzureCLI@2
-            displayName: 'Set AKS context'
-            inputs:
-              azureSubscription: $(azureServiceConnection)
-              scriptType: bash
-              scriptLocation: inlineScript
-              inlineScript: |
-                az aks get-credentials --resource-group $(aksResourceGroup) --name $(aksCluster)
+# Step 4: Set AKS context using Azure CLI
+- task: AzureCLI@2
+  displayName: 'Set AKS context'
+  inputs:
+    azureSubscription: $(azureServiceConnection)
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      az aks get-credentials --resource-group $(aksResourceGroup) --name $(aksCluster)
 
-          - task: KubernetesManifest@0
-            displayName: 'Deploy Kubernetes Manifests'
-            inputs:
-              action: deploy
-              kubernetesServiceConnection: $(kubernetesServiceConnection)
-              namespace: $(namespace)
-              manifests: |
-                k8s/deployment.yaml
-                k8s/service.yaml
-              containers: |
-                $(acrLoginServer)/$(imageName):$(Build.BuildId)
+# Step 5: Deploy Kubernetes manifests to AKS
+- task: KubernetesManifest@0
+  displayName: 'Deploy to AKS'
+  inputs:
+    action: deploy
+    kubernetesServiceConnection: $(kubernetesServiceConnection)
+    namespace: $(namespace)
+    manifests: |
+      k8s/deployment.yaml
+      k8s/service.yaml
+    containers: |
+      $(acrLoginServer)/$(imageName):$(Build.BuildId)
+# Step 6: Verify deployment
+- task: Kubernetes@1
+  displayName: 'Verify Deployment'
+  inputs:
+    kubernetesServiceConnection: $(kubernetesServiceConnection)
+    namespace: $(namespace)
+    command: get
+    arguments: 'pods'
+    outputFormat: 'json'
+    continueOnError: true
