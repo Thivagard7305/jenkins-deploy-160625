@@ -5,11 +5,11 @@ trigger:
 
 variables:
   imageName: 'my-java-app'
-  dockerRegistryServiceConnection: 'ACR-Service-Connection'
+  dockerRegistryServiceConnection: 'ACR-Service-Connection'       # Docker Registry type
   acrLoginServer: 'mygreensappacr.azurecr.io'
   containerRegistry: 'mygreensappacr'
-  azureServiceConnection: 'AzureRM-AKS-Connection'            # ARM service connection
-  kubernetesServiceConnection: 'AKS-K8S-Connection'           # K8s service connection
+  azureServiceConnection: 'AzureRM-AKS-Connection'                # Azure Resource Manager type
+  kubernetesServiceConnection: 'AKS-K8S-Connection'               # Kubernetes type
   aksCluster: 'mygreensappaks'
   aksResourceGroup: 'MyGreensApp-RG'
   namespace: 'default'
@@ -19,8 +19,10 @@ pool:
 
 stages:
 - stage: Build
+  displayName: 'Build Stage'
   jobs:
   - job: Build_Java
+    displayName: 'Build and Push Image'
     steps:
     - checkout: self
 
@@ -34,7 +36,7 @@ stages:
         mavenVersionOption: 'Default'
 
     - task: Docker@2
-      displayName: Build and Push Docker Image
+      displayName: 'Build and Push Docker Image'
       inputs:
         containerRegistry: $(dockerRegistryServiceConnection)
         repository: $(imageName)
@@ -44,9 +46,11 @@ stages:
           $(Build.BuildId)
 
 - stage: Deploy
+  displayName: 'Deploy Stage'
   dependsOn: Build
   jobs:
   - deployment: DeployToAKS
+    displayName: 'Deploy to AKS'
     environment: 'aks-env'
     strategy:
       runOnce:
@@ -62,7 +66,7 @@ stages:
                 az aks get-credentials --resource-group $(aksResourceGroup) --name $(aksCluster)
 
           - task: KubernetesManifest@0
-            displayName: Deploy to AKS
+            displayName: 'Deploy Kubernetes Manifests'
             inputs:
               action: deploy
               kubernetesServiceConnection: $(kubernetesServiceConnection)
