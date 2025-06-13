@@ -63,12 +63,10 @@ steps:
     containers: |
       $(acrLoginServer)/$(imageName):$(Build.BuildId)
 # Step 6: Verify deployment
+# Step 6: Verify deployment
 - task: Kubernetes@1
   displayName: 'Verify Deployment'
   inputs:
-    kubernetesServiceConnection: $(kubernetesServiceConnection)
-    namespace: $(namespace)
+    kubernetesServiceEndpoint: $(kubernetesServiceConnection)
     command: get
-    arguments: 'pods'
-    outputFormat: 'json'
-    continueOnError: true
+    arguments: 'pods -n $(namespace) -o json'
