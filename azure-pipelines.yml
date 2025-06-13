@@ -8,7 +8,8 @@ variables:
   dockerRegistryServiceConnection: 'ACR-Service-Connection'
   acrLoginServer: 'mygreensappacr.azurecr.io'
   containerRegistry: 'mygreensappacr'
-  azureSubscription: 'AzureRM-AKS-Connection'
+  azureServiceConnection: 'AzureRM-AKS-Connection'            # ARM service connection
+  kubernetesServiceConnection: 'AKS-K8S-Connection'           # K8s service connection
   aksCluster: 'mygreensappaks'
   aksResourceGroup: 'MyGreensApp-RG'
   namespace: 'default'
@@ -24,6 +25,7 @@ stages:
     - checkout: self
 
     - task: Maven@3
+      displayName: 'Build WAR with Maven'
       inputs:
         mavenPomFile: 'pom.xml'
         goals: 'package'
@@ -50,19 +52,21 @@ stages:
       runOnce:
         deploy:
           steps:
-          - task: Kubernetes@1
-            displayName: Set AKS context
+          - task: AzureCLI@2
+            displayName: 'Set AKS context'
             inputs:
-              connectionType: 'Azure Resource Manager'
-              azureSubscriptionEndpoint: $(azureSubscription)
-              azureResourceGroup: $(aksResourceGroup)
-              kubernetesCluster: $(aksCluster)
-              command: 'login'
+              azureSubscription: $(azureServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az aks get-credentials --resource-group $(aksResourceGroup) --name $(aksCluster)
 
           - task: KubernetesManifest@0
+            displayName: Deploy to AKS
             inputs:
               action: deploy
-              kubernetesServiceConnection: $(azureSubscription)
+              kubernetesServiceConnection: $(kubernetesServiceConnection)
+              namespace: $(namespace)
               manifests: |
                 k8s/deployment.yaml
                 k8s/service.yaml
